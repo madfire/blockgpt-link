@@ -3,6 +3,7 @@ const ansi = require('ansi-string');
 
 const Session = require('./session');
 const Arduino = require('../upload/arduino');
+const MicroPython = require('../upload/microPython');
 const Microbit = require('../upload/microbit');
 const usbId = require('../lib/usb-id');
 
@@ -297,7 +298,9 @@ class SerialportSession extends Session {
             }
         });
     }
-
+    sleep (delay) {
+        return new Promise(resolve => setTimeout(resolve, delay * 1000));
+    }
     async upload (params) {
         const {message, config, encoding} = params;
         const code = new Buffer.from(message, encoding).toString();
@@ -334,6 +337,30 @@ class SerialportSession extends Session {
                 this.sendRemoteRequest('uploadError', {
                     message: ansi.red + err.message
                 });
+            }
+            break;
+        case 'microPython':
+            this.tool = new MicroPython(this.peripheral.path, config, this.userDataPath,
+                this.toolsPath, this.sendstd.bind(this), this.sendRemoteRequest.bind(this));
+            try {
+                await this.disconnect();
+                const exitCode = await this.tool.flash(code);
+
+                await this.sleep(0.1);
+                await this.connect(this.peripheralParams, true);
+                await this.updateBaudrate({baudRate: 115200});
+                await this.sleep(0.1);
+                this.sendstd(`${ansi.clear}Reset device\n`);
+                await this.write({message: '04', encoding: 'hex'});
+                await this.sleep(0.1);
+                await this.updateBaudrate({baudRate: baudRate});
+
+                this.sendRemoteRequest('uploadSuccess', {aborted: exitCode === 'Aborted'});
+            } catch (err) {
+                this.sendRemoteRequest('uploadError', {
+                    message: ansi.red + err
+                });
+                this.sendRemoteRequest('peripheralUnplug', null);
             }
             break;
         case 'microbit':
@@ -379,6 +406,23 @@ class SerialportSession extends Session {
                 this.sendRemoteRequest('uploadError', {
                     message: ansi.red + err.message
                 });
+            }
+            break;
+        case 'microPython':
+            this.tool = new MicroPython(this.peripheral.path, params, this.userDataPath,
+                this.toolsPath, this.sendstd.bind(this), this.sendRemoteRequest.bind(this));
+            try {
+                await this.disconnect();
+                const exitCode = await this.tool.flashFirmware();
+
+                await this.sleep(0.1);
+                await this.connect(this.peripheralParams, true);
+                this.sendRemoteRequest('uploadSuccess', {aborted: exitCode === 'Aborted'});
+            } catch (err) {
+                this.sendRemoteRequest('uploadError', {
+                    message: ansi.red + err
+                });
+                this.sendRemoteRequest('peripheralUnplug', null);
             }
             break;
         }
