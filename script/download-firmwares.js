@@ -2,8 +2,8 @@ const downloadRelease = require('download-github-release');
 const path = require('path');
 const fs = require('fs');
 
-const user = 'openblockcc';
-const repo = 'openblock-firmwares';
+const DEFAULT_FIRMWARE_REPO = process.env.BLOCKGPT_FIRMWARE_REPO || 'madfire/blockgpt-firmwares';
+const [user, repo] = DEFAULT_FIRMWARE_REPO.split('/');
 const outputdir = path.resolve('./firmwares');
 const leaveZipped = false;
 

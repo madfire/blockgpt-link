@@ -1,7 +1,7 @@
 {
   "name": "openblock-link",
   "version": "0.2.0",
-  "description": "Porvide local hardware function to openblock",
+  "description": "Provide local hardware connectivity for BlockGPT",
   "main": "src/index.js",
   "scripts": {
     "fetch": "rimraf tools firmwares && node script/download-tools.js && node script/download-firmwares.js",
@@ -15,10 +15,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openblockcc/openblock-link.git"
+    "url": "git+https://github.com/madfire/blockgpt-link.git"
   },
   "keywords": [
-    "openblock",
+    "blockgpt",
     "link",
     "microbit",
     "arduino",
@@ -27,14 +27,13 @@
     "ble",
     "serialport"
   ],
-  "author": "OpenBlock Team",
+  "author": "BlockGPT Team",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/openblockcc/openblock-link/issues"
+    "url": "https://github.com/madfire/blockgpt-link/issues"
   },
-  "homepage": "https://github.com/openblockcc/openblock-link#readme",
+  "homepage": "https://github.com/madfire/blockgpt-link#readme",
   "dependencies": {
-    "@abandonware/bluetooth-hci-socket": "^0.5.3-12",
     "@abandonware/noble": "1.9.2-15",
     "ansi-string": "^0.2.1",
     "cli-color": "^2.0.1",
