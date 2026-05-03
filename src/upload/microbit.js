@@ -10,6 +10,7 @@ const ABORT_STATE_CHECK_INTERVAL = 100;
 
 const UFLASH_MODULE_NAME = 'uflash';
 const MICROFS_MODULE_NAME = 'microfs';
+const CTYPES_MODULE_NAME = '_ctypes.cpython-38-darwin.so';
 
 class Microbit {
     constructor (peripheralPath, config, userDataPath, toolsPath, sendstd, sendRemoteRequest) {
@@ -18,6 +19,7 @@ class Microbit {
         this._userDataPath = userDataPath;
         this._projectPath = path.join(userDataPath, 'microbit/project');
         this._pythonPath = path.join(toolsPath, 'Python');
+        this._sitePackagesPath = path.join(this._pythonPath, 'lib', 'python3.8', 'site-packages');
         this._sendstd = sendstd;
         this._sendRemoteRequest = sendRemoteRequest;
 
@@ -34,11 +36,75 @@ class Microbit {
         this._codefilePath = path.join(this._projectPath, 'main.py');
     }
 
+    _findFileRecursive (rootDir, fileName) {
+        if (!fs.existsSync(rootDir)) return null;
+        const stack = [rootDir];
+
+        while (stack.length) {
+            const current = stack.pop();
+            let entries = [];
+            try {
+                entries = fs.readdirSync(current, {withFileTypes: true});
+            } catch (e) {
+                continue;
+            }
+
+            for (const entry of entries) {
+                const fullPath = path.join(current, entry.name);
+                if (entry.isDirectory()) {
+                    stack.push(fullPath);
+                    continue;
+                }
+                if (entry.isFile() && entry.name === fileName) {
+                    return fullPath;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    ensureBundledPythonModules () {
+        if (os.platform() !== 'darwin') return;
+
+        const dynloadDir = path.join(this._pythonPath, 'lib', 'python3.8', 'lib-dynload');
+        const ctypesTarget = path.join(dynloadDir, CTYPES_MODULE_NAME);
+        if (fs.existsSync(ctypesTarget)) return;
+
+        const arduinoPackagesDir = path.join(path.dirname(this._pythonPath), 'Arduino', 'packages');
+        const ctypesSource = this._findFileRecursive(arduinoPackagesDir, CTYPES_MODULE_NAME);
+
+        if (!ctypesSource) {
+            this._sendstd(`${ansi.yellow_dark}Bundled Python is missing ${CTYPES_MODULE_NAME}.\n`);
+            this._sendstd(`${ansi.clear}Auto repair could not find a compatible fallback module.\n`);
+            return;
+        }
+
+        fs.mkdirSync(dynloadDir, {recursive: true});
+        fs.copyFileSync(ctypesSource, ctypesTarget);
+        this._sendstd(`${ansi.yellow_dark}Bundled Python was missing ${CTYPES_MODULE_NAME}.\n`);
+        this._sendstd(`${ansi.clear}Recovered it from local Arduino tools and will continue.\n`);
+    }
+
+    spawnPythonModule (moduleName, args = []) {
+        if (os.platform() !== 'darwin') {
+            return spawn(this._pyPath, ['-m', moduleName, ...args]);
+        }
+
+        const env = {...process.env};
+        env.PYTHONPATH = env.PYTHONPATH ?
+            `${this._sitePackagesPath}:${env.PYTHONPATH}` :
+            this._sitePackagesPath;
+        return spawn('python3', ['-m', moduleName, ...args], {env});
+    }
+
     abortUpload () {
         this._abort = true;
     }
 
     async flash (code) {
+        this.ensureBundledPythonModules();
+
         const fileToPut = [];
 
         if (!fs.existsSync(this._projectPath)) {
@@ -96,7 +162,7 @@ class Microbit {
         this._sendstd(`Try to enter raw REPL.\n`);
 
         return new Promise(resolve => {
-            const ufs = spawn(this._pyPath, ['-m', MICROFS_MODULE_NAME, 'ls']);
+            const ufs = this.spawnPythonModule(MICROFS_MODULE_NAME, ['ls']);
 
             const listenAbortSignal = setInterval(() => {
                 if (this._abort) {
@@ -120,7 +186,7 @@ class Microbit {
 
     ufsPut (file) {
         return new Promise((resolve, reject) => {
-            const ufs = spawn(this._pyPath, ['-m', MICROFS_MODULE_NAME, 'put', file]);
+            const ufs = this.spawnPythonModule(MICROFS_MODULE_NAME, ['put', file]);
 
             ufs.stdout.on('data', buf => {
                 this._sendstd(ansi.red + buf.toString());
@@ -154,7 +220,7 @@ class Microbit {
             // when uflash is running.
             this._sendRemoteRequest('setUploadAbortEnabled', false);
 
-            const uflash = spawn(this._pyPath, ['-m', UFLASH_MODULE_NAME]);
+            const uflash = this.spawnPythonModule(UFLASH_MODULE_NAME);
 
             this._sendstd(`${ansi.green_dark}Start flash firmware...\n`);
             this._sendstd(`${ansi.clear}This step will take tens of seconds, pelese wait.\n`);

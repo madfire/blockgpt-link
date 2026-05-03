@@ -83,12 +83,16 @@ class Session {
         if (typeof method !== 'string') {
             throw new Error('methon value missing or not a string');
         }
-        this.didReceiveCall(method, params || {}, sendResult);
+        Promise.resolve(this.didReceiveCall(method, params || {}, sendResult))
+            .catch(error => {
+                const message = error && error.message ? error.message : String(error);
+                sendResult(null, message);
+            });
     }
 
     didReceiveResponse (response) {
         const {id, error, result} = response;
-        if (!id) {
+        if (typeof id === 'undefined' || id === null) {
             throw new Error('esponse ID value missing or wrong type');
         }
         const completionHandler = this._completionHandlers[id];
